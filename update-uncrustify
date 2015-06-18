@@ -1,0 +1,49 @@
+#!/bin/bash
+#
+# This server hook enforces that committer have applied uncrustify on changed
+# files. For fast-forward pushes it checks files for every commit from oldrev
+# to newrev. For pushes with zero oldrev it uses commits from HEAD to newrev.
+#
+
+# --- Command line
+refname="$1"
+oldrev="$2"
+newrev="$3"
+
+result=0
+
+# --- Safety check
+if [ -z "$GIT_DIR" ]; then
+    echo "Don't run this script from the command line." >&2
+    echo " (if you want, you could supply GIT_DIR then run" >&2
+    echo "  $0 <ref> <oldrev> <newrev>)" >&2
+    exit 1
+fi
+
+if [ -z "$refname" -o -z "$oldrev" -o -z "$newrev" ]; then
+    echo "usage: $0 <ref> <oldrev> <newrev>" >&2
+    exit 1
+fi
+
+if [ "$oldrev" = "0000000000000000000000000000000000000000" ]; then
+    oldrev=HEAD
+fi
+
+uncrustifycfg=$(mktemp)
+
+for rev in $(git log --pretty="format:%H" $oldrev..$newrev); do
+    git show $rev:uncrustify.cfg > "$uncrustifycfg"
+
+    for f in $(git show --pretty="format:" --name-only $rev | egrep '\.h$|\.cpp$' ); do
+	cmp -s <(git show "$rev:$f") <(git show "$rev:$f" | uncrustify -q -l CPP -c "$uncrustifycfg")
+	if [ $? -ne 0 ]; then
+	    result=1
+	    echo "You must run uncrustify for $f in $rev"
+	fi
+    done
+done
+
+rm "$uncrustifycfg"
+
+# --- Finished
+exit $result
