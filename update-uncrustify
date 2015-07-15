@@ -38,13 +38,13 @@ uncrustifycfg=$(mktemp)
 for rev in $(git log --pretty="format:%H" $oldrev..$newrev); do
     git show $rev:uncrustify.cfg > "$uncrustifycfg"
 
-    for f in $(git show --pretty="format:" --name-only $rev | egrep '\.h$|\.cpp$' ); do
+    while read f; do
 	cmp -s <(git show "$rev:$f") <(git show "$rev:$f" | uncrustify -q -l CPP -c "$uncrustifycfg")
 	if [ $? -ne 0 ]; then
 	    result=1
 	    echo "You must run uncrustify for $f in $rev"
 	fi
-    done
+    done < <(git show --pretty="format:" --name-only $rev | egrep '\.h$|\.cpp$')
 done
 
 rm "$uncrustifycfg"
