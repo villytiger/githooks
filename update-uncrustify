@@ -29,6 +29,10 @@ if [ "$oldrev" = "0000000000000000000000000000000000000000" ]; then
     oldrev=HEAD
 fi
 
+if [ "$newrev" = "0000000000000000000000000000000000000000" ]; then
+    exit 0
+fi
+
 uncrustifycfg=$(mktemp)
 
 for rev in $(git log --pretty="format:%H" $oldrev..$newrev); do
