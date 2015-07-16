@@ -1,0 +1,57 @@
+#!/bin/bash
+#
+# This server hook enforces that committer have applied proper formatting on
+# changed files. For fast-forward pushes it checks files for every commit from
+# oldrev to newrev. For pushes with zero oldrev it uses commits from HEAD to
+# newrev.
+#
+
+# --- Command line
+refname="$1"
+oldrev="$2"
+newrev="$3"
+
+result=0
+
+# --- Safety check
+if [ -z "$GIT_DIR" ]; then
+    echo "Don't run this script from the command line." >&2
+    echo " (if you want, you could supply GIT_DIR then run" >&2
+    echo "  $0 <ref> <oldrev> <newrev>)" >&2
+    exit 1
+fi
+
+if [ -z "$refname" -o -z "$oldrev" -o -z "$newrev" ]; then
+    echo "usage: $0 <ref> <oldrev> <newrev>" >&2
+    exit 1
+fi
+
+if [ "$oldrev" = "0000000000000000000000000000000000000000" ]; then
+    oldrev=HEAD
+fi
+
+if [ "$newrev" = "0000000000000000000000000000000000000000" ]; then
+    exit 0
+fi
+
+git rev-parse --short HEAD 2>/dev/null
+if [ $? -ne 0 ]; then
+    # There is no HEAD yet
+    exit 0
+fi
+
+for rev in $(git log --pretty="format:%H" $oldrev..$newrev); do
+    while read f; do
+	egrep -q $'\t|\s+$|^\s{4}*\s{1,3}[^ ]' <(git show "$rev:$f")
+	if [ $? -eq 0 ]; then
+	    result=1
+	    echo "You must fix formatting for $f in $rev"
+            echo "Run the following command to see wrong lines:"
+	    echo "egrep -n $'\t|\s+$|^\s{4}*\s{1,3}[^ ]' <(git show \"$rev:$f\")"
+	    echo ""
+	fi
+    done < <(git show --pretty="format:" --name-only --diff-filter=ACMR $rev | egrep '\.qbs$|\.subproject$')
+done
+
+# --- Finished
+exit $result
