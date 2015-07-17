@@ -39,12 +39,30 @@ if [ $? -ne 0 ]; then
     exit 0
 fi
 
+function skipFile {
+    skipDirs=$1
+    f=$2
+    while read d; do
+	if [ "${f:0:${#d}}" == "$d" ]; then
+	    return 0
+	else
+	    return 1
+	fi
+    done <<< "$skipDirs"
+}
+
 uncrustifycfg=$(mktemp)
 
 for rev in $(git log --pretty="format:%H" $oldrev..$newrev); do
     git show $rev:uncrustify.cfg > "$uncrustifycfg"
 
+    skipdirs=$(git show --pretty="format:" --name-only $rev | egrep 'nouncrustify$' | xargs -I {} dirname './{}/' | sed 's/$/\//g')
+
     while read f; do
+	if skipFile "$skipDirs" "$f"; then
+	    continue
+	fi
+	
 	cmp -s <(git show "$rev:$f") <(git show "$rev:$f" | uncrustify -q -l CPP -c "$uncrustifycfg")
 	if [ $? -ne 0 ]; then
 	    result=1
@@ -55,5 +73,6 @@ done
 
 rm "$uncrustifycfg"
 
+exit 1
 # --- Finished
 exit $result
