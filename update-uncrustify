@@ -39,12 +39,32 @@ if [ $? -ne 0 ]; then
     exit 0
 fi
 
+function fileInDirs {
+    local f=$1
+    local dirs=$2
+    while read d; do
+	if [ "${f:0:${#d}}" == "$d" ]; then
+	    echo "$d"
+	    return 0
+	fi
+    done <<< "$dirs"
+    return 1
+}
+
 uncrustifycfg=$(mktemp)
 
 for rev in $(git log --pretty="format:%H" $oldrev..$newrev); do
-    git show $rev:uncrustify.cfg > "$uncrustifycfg"
+    skipDirs=$(git ls-tree --name-only -r $rev | egrep 'nouncrustify$' | xargs -I {} dirname './{}' | sed 's/$/\//g')
+    cfgDirs=$(git ls-tree --name-only -r $rev | egrep 'uncrustify.cfg$' | xargs -I {} dirname './{}' | sed 's/$/\//g')
 
     while read f; do
+	if fileInDirs "./$f" "$skipDirs" >/dev/null; then continue; fi
+	
+	cfgDir=$(fileInDirs "./$f" "$cfgDirs")
+	if [ $? -ne 0 ]; then continue; fi
+
+	git show "$rev:${cfgDir:2}uncrustify.cfg" > "$uncrustifycfg"
+	
 	cmp -s <(git show "$rev:$f") <(git show "$rev:$f" | uncrustify -q -l CPP -c "$uncrustifycfg")
 	if [ $? -ne 0 ]; then
 	    result=1
